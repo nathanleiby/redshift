@@ -25,30 +25,26 @@ function preload() {
 
     // Music      
     game.load.audio('background-music', ['assets/music.mp3']);
-    music = game.add.audio('background-music');
 }
 
+// Sprites
 var player;
 var background;
 var platforms;
-var cursors;
 var stars;
 
-// score
+// Score
 var score = 0;
 var scoreText;
 
 // Music
 var music;
 
-// Movement
-var defaultPlayerVelocity = 150;
-
-// Global shift speed
+// Shift params
 var shiftSpeed;
 var playerVelocity;
 var musicSpeed;
-
+var shiftEnabled = true;
 
 function create() {
 
@@ -98,17 +94,13 @@ function create() {
     //  Our controls.
     cursors = game.input.keyboard.createCursorKeys();
 
-    // ONE is "red" (slow down)
+    // ONE is "slower"
     key1 = game.input.keyboard.addKey(Phaser.Keyboard.ONE);
-    key1.onDown.add(shiftSlow, this);
+    key1.onDown.add(goSlower, this);
 
-    // TWO is "normal"
-    key2 = game.input.keyboard.addKey(Phaser.Keyboard.TWO);
-    key2.onDown.add(shiftNormal, this);
-
-    // THREE is "blue" (fast)
+    // THREE is "faster"
     key3 = game.input.keyboard.addKey(Phaser.Keyboard.THREE);
-    key3.onDown.add(shiftFast, this);
+    key3.onDown.add(goFaster, this);
 
 
     // Add stars..
@@ -128,77 +120,19 @@ function create() {
     // Score Text
     scoreText = game.add.text(16, 16, 'score: 0', { fontSize: '32px', fill: '#000' })
 
-    // Music
+    // wait for music to load
+    // start();
+    music = game.add.audio('background-music');
+    game.sound.setDecodedCallback([ music ], start, this);
+}
+
+function start() {
+    // start playing music
     music.loop = true;
     music.play();
 
-    
-    // // Set game speed to normal
-    console.log('whut');
+    // set default game speed
     shiftNormal();
-    console.log("shift normal done")
-}
-
-function shiftSlow() {
-    if (shiftSpeed == 'slow') {
-        return;
-    }
-
-    // TODO: Make the transition smoother
-
-    // Change sprite colors (more red)
-    background.tint =  0xe00000; // ~80% red
-
-    // Slow down music
-    updatePlaybackRate(.8);
-
-    // Change player movement rate 
-    playerVelocity = defaultPlayerVelocity * .8;
-
-    shiftSpeed = 'slow';
-}
-
-function shiftNormal() {
-    if (shiftSpeed == 'normal') {
-        return;
-    }
-    
-    // TODO: Make the transition smoother
-
-    // Change sprite colors (more red) 
-    background.tint =  0xffffff; // no tint
-
-    // Slow down music
-    updatePlaybackRate(1.0);
-
-    // Change player movement rate 
-    playerVelocity = defaultPlayerVelocity;
-
-    shiftSpeed = 'normal';
-}
-
-function shiftFast() {
-    if (shiftSpeed == 'fast') {
-        return;
-    }
-
-    // Change sprite colors (more blue)
-    background.tint =  0x0000e0; // ~80% blue
-
-    // Slow down music
-    updatePlaybackRate(1.2);
-
-    // Change player movement rate 
-    playerVelocity = defaultPlayerVelocity * 1.2;
-    
-    shiftSpeed = 'fast';
-}
-
-function updatePlaybackRate(val) {
-    if (music._sound == null) {
-        return;
-    }
-    music._sound.playbackRate.value = val;
 }
 
 function update() {
@@ -242,7 +176,6 @@ function update() {
     {
         player.body.velocity.y = -300;
     }
-
 }
 
 function collectStar(player, star) {
@@ -256,6 +189,130 @@ function increaseScore(additionalPoints) {
     score += 10;
     scoreText.text = 'Score: ' + score;
 }
+
+///////////////////////////////////////
+// Tweening
+///////////////////////////////////////
+
+function tweenTint(obj, startColor, endColor, time) {    
+    if (Math.abs(startColor - endColor) < 20) {
+        return;
+    }
+
+    // create an object to tween with our step value at 0    
+    var colorBlend = {step: 0};    
+    // create the tween on this object and tween its step property to 100    
+    var colorTween = game.add.tween(colorBlend).to({step: 100}, time);        
+    
+    // set the object to the start color straight away
+    obj.tint = startColor;     
+    // run the interpolateColor function every time the tween updates, feeding it the    
+    // updated value of our tween each time, and set the result as our tint    
+    colorTween.onUpdateCallback(function() {      
+        obj.tint = Phaser.Color.interpolateColor(startColor, endColor, 100, colorBlend.step);
+    });
+       
+    // start the tween    
+    colorTween.start();
+}
+
+function tweenMusicVelocity(startVelocity, endVelocity, time) {    
+    if (Math.abs(startVelocity-endVelocity) < .01) {
+        return;
+    }
+    
+    // create an object to tween with our step value at 0    
+    var musicVelSteps = {step: 0};    
+    // create the tween on this object and tween its step property to 100 
+    var totalSteps = 20;
+    var musicVelocityTween = game.add.tween(musicVelSteps).to({step: totalSteps}, time);     
+    // determine amount to change velocity on each step 
+    var stepSize = 1.0 * (endVelocity - startVelocity) / totalSteps;
+
+    // set the object to the start velocity straight away
+    updatePlaybackRate(startVelocity);
+    // run the update function every time the tween updates
+    musicVelocityTween.onUpdateCallback(function() {
+        var newVelocity = startVelocity + (musicVelSteps.step * stepSize);
+        updatePlaybackRate(newVelocity);
+    });
+
+    // start the tween    
+    musicVelocityTween.start();
+}
+
+///////////////////////////////////////
+// Shifting
+///////////////////////////////////////
+
+function goFaster() {
+    if (shiftSpeed == 'slow') {
+        shiftNormal();
+    } else if (shiftSpeed == 'normal') {
+        shiftFast();
+    }
+}
+
+function goSlower() {
+    if (shiftSpeed == 'fast') {
+        shiftNormal();
+    } else if (shiftSpeed == 'normal') {
+        shiftSlow();
+    }
+}
+
+function shiftSlow() {
+    shift('slow', 0.8, 0.8, 0xe00000);
+}
+
+function shiftNormal() {
+    shift('normal', 1.0, 1.0, 0xffffff);
+}
+
+function shiftFast() {
+    shift('fast', 1.2, 1.2, 0x0000e0);
+}
+
+function shift(name, musicVelocity, playerVelocityMult, backgroundTint) {
+    if (!shiftEnabled || shiftSpeed == name) {
+        return;
+    }
+    shiftSpeed = name;
+
+    musicVelocity = musicVelocity;
+    playerVelocity = 150 * playerVelocityMult;
+
+    shiftEnabled = false;
+    game.time.events.add(Phaser.Timer.SECOND * 3, function() {
+        shiftEnabled = true   
+    }, this);
+
+    // Change sprite colors (more red)
+    tweenTint(background, background.tint, backgroundTint, 2000);
+
+    // Slow down music
+    tweenMusicVelocity(getPlaybackRate(), musicVelocity, 2000);
+}
+
+///////////////////////////////////////
+// Audio
+///////////////////////////////////////
+
+function updatePlaybackRate(val) {
+    // change it several times
+    if (music._sound == null) {
+        return;
+    }
+    music._sound.playbackRate.value = val;
+}
+
+function getPlaybackRate() {
+    if (music._sound == null) {
+        return;
+    }
+    return music._sound.playbackRate.value;
+}
+
 </script>
 
 </body>
